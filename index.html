@@ -1,63 +1,33 @@
-<!DOCTYPE html>
-<html lang="sv">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Textanalys - Svenska Filmomdömen</title>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
-    <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f4f9; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
-        .container { background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 100%; max-width: 500px; }
-        h1 { color: #333; text-align: center; margin-bottom: 1.5rem; font-size: 1.5rem; }
-        textarea { width: 100%; height: 100px; padding: 10px; border: 1px solid #ddd; border-radius: 6px; resize: none; box-sizing: border-box; font-size: 1rem; }
-        button { width: 100%; padding: 12px; background-color: #4CAF50; color: white; border: none; border-radius: 6px; font-size: 1rem; cursor: pointer; margin-top: 10px; transition: background 0.3s; }
-        button:hover { background-color: #45a049; }
-        button:disabled { background-color: #cccccc; cursor: not-allowed; }
-        .result-box { margin-top: 20px; padding: 15px; border-radius: 6px; background-color: #f9f9f9; border: 1px solid #eee; display: none; }
-        .error-box { margin-top: 20px; padding: 15px; border-radius: 6px; background-color: #ffebee; border: 1px solid #ffcdd2; color: #b71c1c; display: none; }
-        .prob-bar-container { margin-bottom: 8px; }
-        .prob-label { font-size: 0.85rem; color: #555; display: flex; justify-content: space-between; }
-        .prob-bar { height: 8px; background-color: #e0e0e0; border-radius: 4px; overflow: hidden; margin-top: 2px; }
-        .prob-fill { height: 100%; background-color: #2196F3; width: 0%; transition: width 0.5s ease; }
-        .highlight { font-weight: bold; font-size: 1.1rem; text-align: center; display: block; margin-bottom: 10px; }
-    </style>
-</head>
-<body>
-
-<div class="container">
-    <h1>Analysera Omdöme</h1>
-    
-    <div id="loadingStatus" style="text-align: center; color: #666; margin-bottom: 10px;">Laddar modell...</div>
-
-    <textarea id="inputText" placeholder="Skriv ditt omdöme här (t.ex. 'Vilken fantastisk film')..."></textarea>
-    <button id="analyzeBtn" onclick="predict()" disabled>Analysera Text</button>
-
-    <div id="errorBox" class="error-box"></div>
-
-    <div id="resultBox" class="result-box">
-        <span id="predictionResult" class="highlight"></span>
-        <hr style="border: 0; border-top: 1px solid #ddd; margin: 10px 0;">
-        <div id="probabilities"></div>
-    </div>
-</div>
-
 <script>
     let model;
     let metadata;
 
-    // 1. Ladda modellen och metadata
+    // --- INSTÄLLNINGAR ---
+    // Om du laddade upp hela mappen 'tfjs_model' på GitHub, ändra raden nedan till:
+    // const MODEL_PATH = 'tfjs_model/';
+    const MODEL_PATH = 'tfjs_model/'; 
+    // ---------------------
+
     async function loadModel() {
         const statusEl = document.getElementById('loadingStatus');
         const btn = document.getElementById('analyzeBtn');
         const errBox = document.getElementById('errorBox');
 
         try {
-            // Ladda modellen (se till att filerna ligger i samma mapp)
-            model = await tf.loadLayersModel('model.json');
+            // Bygg sökvägar
+            const modelUrl = MODEL_PATH + 'model.json';
+            const metadataUrl = MODEL_PATH + 'metadata.json';
+
+            console.log(`Försöker ladda modell från: ${modelUrl}`);
+
+            // 1. Ladda modellen
+            model = await tf.loadLayersModel(modelUrl);
             
-            // Ladda metadata (ordlistan)
-            const metadataResponse = await fetch('metadata.json');
-            if (!metadataResponse.ok) throw new Error("Kunde inte hitta metadata.json");
+            // 2. Ladda metadata
+            const metadataResponse = await fetch(metadataUrl);
+            if (!metadataResponse.ok) {
+                throw new Error(`Kunde inte hitta metadata.json på adressen: ${metadataUrl} (Status: ${metadataResponse.status})`);
+            }
             metadata = await metadataResponse.json();
 
             statusEl.innerText = "Modell redo!";
@@ -69,17 +39,23 @@
             console.error(error);
             statusEl.style.display = 'none';
             errBox.style.display = 'block';
-            errBox.innerText = `Fel vid laddning av modell: ${error.message}. \n\nKontrollera att du kör detta via en lokal server (http://localhost) och inte öppnar filen direkt, samt att model.json och metadata.json ligger i samma mapp.`;
+            // Visa ett tydligt felmeddelande för användaren
+            errBox.innerHTML = `
+                <strong>Fel vid laddning:</strong><br>
+                ${error.message}<br><br>
+                <em>Tips: Kontrollera din GitHub-filstruktur. <br>
+                Om filerna ligger i en mapp (t.ex. 'tfjs_model'), måste du uppdatera variabeln MODEL_PATH i koden.</em>
+            `;
         }
     }
 
     loadModel();
 
-    // 2. Tokenizer-funktion (Måste matcha Python-koden exakt)
+    // Tokenizer-funktion
     function tokenize(text) {
         const words = text.toLowerCase().replace(/[.,!?;:()]/g, '').split(/\s+/);
         const sequence = [];
-        const oovIndex = metadata.word_index[metadata.oov_token] || 1; // Default to 1 if missing
+        const oovIndex = metadata.word_index[metadata.oov_token] || 1; 
 
         words.forEach(word => {
             if (word) {
@@ -90,14 +66,12 @@
         return sequence;
     }
 
-    // 3. Padding-funktion
+    // Padding-funktion
     function padSequence(sequence) {
         const maxLen = metadata.max_length;
         if (sequence.length > maxLen) {
-            // Truncate (post) -> Python koden hade truncating='post'
             return sequence.slice(0, maxLen);
         } else {
-            // Pad (post) -> Python koden hade padding='post'
             const padCount = maxLen - sequence.length;
             const padded = [...sequence];
             for (let i = 0; i < padCount; i++) {
@@ -107,7 +81,7 @@
         }
     }
 
-    // 4. Huvudfunktion för prediktion
+    // Prediktion
     async function predict() {
         const text = document.getElementById('inputText').value;
         const resultBox = document.getElementById('resultBox');
@@ -121,37 +95,28 @@
         }
 
         try {
-            // Preprocessing
             const sequence = tokenize(text);
             const padded = padSequence(sequence);
-            
-            // Skapa tensor [1, 20] (Batch size 1, sequence length 20)
             const inputTensor = tf.tensor2d([padded], [1, metadata.max_length]);
 
-            // Kör modellen
             const prediction = model.predict(inputTensor);
-            const data = await prediction.data(); // Hämtar sannolikheterna som en array
+            const data = await prediction.data(); 
             
-            // Hitta högsta värdet
             const maxIndex = data.indexOf(Math.max(...data));
-            const labels = metadata.labels; // ['negativ', 'neutral', 'positiv']
+            const labels = metadata.labels; 
             
-            // Visa resultatet
             const resultText = document.getElementById('predictionResult');
             resultText.innerText = `Bedömning: ${labels[maxIndex].toUpperCase()}`;
             
-            // Färgsätt resultat
             if(labels[maxIndex] === 'positiv') resultText.style.color = 'green';
             else if(labels[maxIndex] === 'negativ') resultText.style.color = 'red';
             else resultText.style.color = '#888';
 
-            // Visa sannolikheter
             const probContainer = document.getElementById('probabilities');
-            probContainer.innerHTML = ''; // Rensa gamla
+            probContainer.innerHTML = ''; 
             
             labels.forEach((label, idx) => {
                 const percentage = (data[idx] * 100).toFixed(1);
-                
                 const div = document.createElement('div');
                 div.className = 'prob-bar-container';
                 div.innerHTML = `
@@ -164,8 +129,6 @@
             });
 
             resultBox.style.display = 'block';
-
-            // Städa minnet
             inputTensor.dispose();
             prediction.dispose();
 
@@ -179,10 +142,6 @@
     function getColor(label) {
         if(label === 'positiv') return '#4CAF50';
         if(label === 'negativ') return '#F44336';
-        return '#9E9E9E'; // neutral
+        return '#9E9E9E'; 
     }
-
 </script>
-
-</body>
-</html>

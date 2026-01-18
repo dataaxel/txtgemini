@@ -7,6 +7,11 @@ Precis som tänkt.
 Nu skall colab-filen
 Gemini_textklass_web_från_fil.ipynb
 
+Senaste versionen är Functional Fix
+Måndag kl 00.50
+
+
+
 Vara uppdaterad för konfikten medllan Kears 3 och Tensorflow 2.
 Felet med
  Samt kollar om:

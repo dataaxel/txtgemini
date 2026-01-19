@@ -5,7 +5,11 @@ Jag väntar på output därifrån.
 Precis som tänkt.
 
 Nu skall colab-filen
-Gemini_textklass_web_från_fil.ipynb
+
+Gemini_textklass_web_från_fil_Keras_v2.ipynb
+
+
+//Gemini_textklass_web_från_fil.ipynb
 
 Senaste versionen är Functional Fix
 Måndag kl 00.50
